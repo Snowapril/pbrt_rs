@@ -1,0 +1,143 @@
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+name: CI
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --workspace --all-targets --all-features
+
+  check_msrv:
+    name: Check MSRV (1.59.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: dtolnay/rust-toolchain@1.59.0
+      - uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --workspace --all-targets --all-features
+
+  generated:
+    name: Generated
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Run generator
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: -p generator
+      - name: Format generated results
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all
+      - name: Diff autogen result
+        run: git diff --quiet || (echo "::error::Generated files are different, please regenerate with cargo run -p generator!"; git diff; false)
+
+  test:
+    name: Vulkan Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Vulkan loader
+        run: sudo apt-get install libvulkan-dev
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Test all targets
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --workspace --all-targets
+      - name: Test docs
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --workspace --doc
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+      - uses: actions-rs/cargo@v1
+        name: Clippy lint without features
+        with:
+          command: clippy
+          args: --workspace --all-targets --no-default-features -- -D warnings
+      - uses: actions-rs/cargo@v1
+        name: Clippy lint with all features
+        with:
+          command: clippy
+          args: --workspace --all-targets --all-features -- -D warnings
+      - uses: actions-rs/cargo@v1
+        name: Clippy lint with default features
+        with:
+          command: clippy
+          args: --workspace --all-targets -- -D warnings
+
+  docs:
+    name: Build-test docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        name: Document all crates
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+        with:
+          command: doc
+          args: --all --all-features --no-deps --document-private-items

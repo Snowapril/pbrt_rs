@@ -1,0 +1,6 @@
+[workspace]
+members = [
+  "crates/bin/pbrt_rs",
+]
+
+exclude = ["benches"]
